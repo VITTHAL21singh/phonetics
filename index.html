@@ -127,107 +127,106 @@
         </div>
     </div>
 
-    <!-- Firebase SDK Imports (Kept for environment compatibility, though not used for data storage here) -->
-    <script type="module">
-        // Firebase and Firestore imports
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // Global variables for Firebase (required environment setup)
-        let app, db, auth;
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        let firebaseConfig;
-        
-        try {
-            firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-        } catch (e) {
-            console.error("Failed to parse firebase config:", e);
-            firebaseConfig = {};
-        }
-
-        async function initFirebase() {
-            try {
-                if (Object.keys(firebaseConfig).length > 0) {
-                    app = initializeApp(firebaseConfig);
-                    db = getFirestore(app);
-                    auth = getAuth(app);
-
-                    if (typeof __initial_auth_token !== 'undefined') {
-                        await signInWithCustomToken(auth, __initial_auth_token);
-                    } else {
-                        await signInAnonymously(auth);
-                    }
-                    // console.log("Firebase initialized and authenticated successfully.");
-                } else {
-                    // console.warn("Firebase config is empty. Proceeding without full Firebase services.");
-                }
-            } catch (error) {
-                console.error("Error during Firebase initialization or authentication:", error);
-            }
-        }
-
-        // Initialize Firebase on window load
-        window.addEventListener('load', initFirebase);
-    </script>
-
     <!-- Application Logic and Gemini API Calls -->
     <script>
-        // Constants for Gemini API calls
-        const API_KEY = ""; // Canvas will provide this at runtime
+        // --- Environment Detection ---
+        // Determines if we are in the secure canvas environment or running statically (e.g., GitHub Pages).
+        const IS_STATIC_HOSTING = typeof __app_id === 'undefined'; 
+
+        // Constants for Gemini API calls (Only used if not static hosting)
+        const API_KEY = ""; 
         const SEARCH_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${API_KEY}`;
         const TTS_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${API_KEY}`;
         const MAX_RETRIES = 5;
 
+        // --- Mock Audio Placeholder ---
+        // A simple function to play a beep sound when running statically
+        function playMockAudio() {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(440, audioCtx.currentTime); // A4 note
+            gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.2); // 200ms duration
+        }
+
+
         // --- Caching Strategy ---
         const cache = {
             searchInfo: {},
-            audioUrls: {} // Stores Object URL for cached audio blob
+            audioUrls: {} // Stores Object URL for cached audio blob (or 'mock' string)
         };
 
         // --- Data Structure for IPA Symbols ---
         const ipaSymbols = {
             vowels: [
-                { symbol: 'iː', name: 'long E', example: 'sheep' },
-                { symbol: 'ɪ', name: 'short I', example: 'ship' },
-                { symbol: 'e', name: 'short E', example: 'red' },
-                { symbol: 'æ', name: 'short A', example: 'cat' },
-                { symbol: 'ʌ', name: 'short U', example: 'cup' },
-                { symbol: 'ɑː', name: 'long A', example: 'father' },
-                { symbol: 'ɔː', name: 'long O', example: 'door' },
-                { symbol: 'ʊ', name: 'short OO', example: 'good' },
-                { symbol: 'uː', name: 'long OO', example: 'blue' },
-                { symbol: 'ə', name: 'Schwa', example: 'about' },
-                { symbol: 'aɪ', name: 'Diphthong I', example: 'my' },
-                { symbol: 'ɔɪ', name: 'Diphthong Oi', example: 'boy' },
+                { symbol: 'iː', name: 'long E', example: 'sheep', mock_desc: 'High front long vowel, common in "fleece".' },
+                { symbol: 'ɪ', name: 'short I', example: 'ship', mock_desc: 'Near-high near-front vowel, common in "kit".' },
+                { symbol: 'e', name: 'short E', example: 'red', mock_desc: 'Mid-front vowel, as in "dress".' },
+                { symbol: 'æ', name: 'short A', example: 'cat', mock_desc: 'Near-low front vowel, as in "trap".' },
+                { symbol: 'ʌ', name: 'short U', example: 'cup', mock_desc: 'Low-mid central vowel, often in stressed short syllables.' },
+                { symbol: 'ɑː', name: 'long A', example: 'father', mock_desc: 'Low back long vowel, as in "bath" (UK English).' },
+                { symbol: 'ɔː', name: 'long O', example: 'door', mock_desc: 'Mid-back round long vowel, as in "thought".' },
+                { symbol: 'ʊ', name: 'short OO', example: 'good', mock_desc: 'Near-high near-back round vowel, as in "foot".' },
+                { symbol: 'uː', name: 'long OO', example: 'blue', mock_desc: 'High back round long vowel, as in "goose".' },
+                { symbol: 'ə', name: 'Schwa', example: 'about', mock_desc: 'Mid-central unstressed vowel, the most common sound in English.' },
+                { symbol: 'aɪ', name: 'Diphthong I', example: 'my', mock_desc: 'A closing diphthong from open to high, as in "price".' },
+                { symbol: 'ɔɪ', name: 'Diphthong Oi', example: 'boy', mock_desc: 'A closing diphthong, as in "choice".' },
             ],
             consonants: [
-                { symbol: 'p', name: 'P sound', example: 'pen' },
-                { symbol: 'b', name: 'B sound', example: 'bat' },
-                { symbol: 't', name: 'T sound', example: 'top' },
-                { symbol: 'd', name: 'D sound', example: 'dog' },
-                { symbol: 'k', name: 'K sound', example: 'cat' },
-                { symbol: 'g', name: 'G sound', example: 'go' },
-                { symbol: 'f', name: 'F sound', example: 'fish' },
-                { symbol: 'v', name: 'V sound', example: 'van' },
-                { symbol: 'θ', name: 'Th (voiceless)', example: 'thing' },
-                { symbol: 'ð', name: 'Th (voiced)', example: 'this' },
-                { symbol: 's', name: 'S sound', example: 'sun' },
-                { symbol: 'z', name: 'Z sound', example: 'zoo' },
-                { symbol: 'ʃ', name: 'Sh sound', example: 'ship' },
-                { symbol: 'ʒ', name: 'Zh sound', example: 'vision' },
-                { symbol: 'tʃ', name: 'Ch sound', example: 'church' },
-                { symbol: 'dʒ', name: 'J sound', example: 'judge' },
-                { symbol: 'm', name: 'M sound', example: 'man' },
-                { symbol: 'n', name: 'N sound', example: 'no' },
-                { symbol: 'ŋ', name: 'Ng sound', example: 'sing' },
-                { symbol: 'l', name: 'L sound', example: 'love' },
-                { symbol: 'r', name: 'R sound', example: 'run' },
-                { symbol: 'j', name: 'Y sound', example: 'yes' },
-                { symbol: 'w', name: 'W sound', example: 'wet' },
-                { symbol: 'h', name: 'H sound', example: 'hat' },
+                { symbol: 'p', name: 'P sound', example: 'pen', mock_desc: 'Voiceless bilabial stop, air blocked by both lips then released.' },
+                { symbol: 'b', name: 'B sound', example: 'bat', mock_desc: 'Voiced bilabial stop, same as /p/ but with vocal fold vibration.' },
+                { symbol: 't', name: 'T sound', example: 'top', mock_desc: 'Voiceless alveolar stop, air blocked by the tongue tip on the ridge.' },
+                { symbol: 'd', name: 'D sound', example: 'dog', mock_desc: 'Voiced alveolar stop, same as /t/ but with vocal fold vibration.' },
+                { symbol: 'k', name: 'K sound', example: 'cat', mock_desc: 'Voiceless velar stop, air blocked by the tongue back against the soft palate.' },
+                { symbol: 'g', name: 'G sound', example: 'go', mock_desc: 'Voiced velar stop, same as /k/ but with vocal fold vibration.' },
+                { symbol: 'f', name: 'F sound', example: 'fish', mock_desc: 'Voiceless labiodental fricative, air forced through the gap between lower lip and upper teeth.' },
+                { symbol: 'v', name: 'V sound', example: 'van', mock_desc: 'Voiced labiodental fricative, same as /f/ but with vocal fold vibration.' },
+                { symbol: 'θ', name: 'Th (voiceless)', example: 'thing', mock_desc: 'Voiceless dental fricative, tongue tip near or between teeth.' },
+                { symbol: 'ð', name: 'Th (voiced)', example: 'this', mock_desc: 'Voiced dental fricative, same as /θ/ but with vocal fold vibration.' },
+                { symbol: 's', name: 'S sound', example: 'sun', mock_desc: 'Voiceless alveolar fricative (sibilant).' },
+                { symbol: 'z', name: 'Z sound', example: 'zoo', mock_desc: 'Voiced alveolar fricative (sibilant), same as /s/ but with vocal fold vibration.' },
+                { symbol: 'ʃ', name: 'Sh sound', example: 'ship', mock_desc: 'Voiceless postalveolar fricative, often called "esh".' },
+                { symbol: 'ʒ', name: 'Zh sound', example: 'vision', mock_desc: 'Voiced postalveolar fricative, often called "yogh".' },
+                { symbol: 'tʃ', name: 'Ch sound', example: 'church', mock_desc: 'Voiceless postalveolar affricate, combination of /t/ and /ʃ/.' },
+                { symbol: 'dʒ', name: 'J sound', example: 'judge', mock_desc: 'Voiced postalveolar affricate, combination of /d/ and /ʒ/.' },
+                { symbol: 'm', name: 'M sound', example: 'man', mock_desc: 'Voiced bilabial nasal, airflow through the nose, lips closed.' },
+                { symbol: 'n', name: 'N sound', example: 'no', mock_desc: 'Voiced alveolar nasal, airflow through the nose, tongue tip on the alveolar ridge.' },
+                { symbol: 'ŋ', name: 'Ng sound', example: 'sing', mock_desc: 'Voiced velar nasal, airflow through the nose, tongue back against the soft palate.' },
+                { symbol: 'l', name: 'L sound', example: 'love', mock_desc: 'Voiced alveolar lateral approximant, airflow around the sides of the tongue.' },
+                { symbol: 'r', name: 'R sound', example: 'run', mock_desc: 'Voiced alveolar or postalveolar approximant (rhotic sound).' },
+                { symbol: 'j', name: 'Y sound', example: 'yes', mock_desc: 'Voiced palatal approximant, as in "yes".' },
+                { symbol: 'w', name: 'W sound', example: 'wet', mock_desc: 'Voiced labial-velar approximant, a glide starting with rounded lips.' },
+                { symbol: 'h', name: 'H sound', example: 'hat', mock_desc: 'Voiceless glottal fricative, airflow through the open glottis.' },
             ]
         };
+
+        // Pre-populate mock data for static hosting
+        if (IS_STATIC_HOSTING) {
+            ipaSymbols.vowels.forEach(item => {
+                cache.searchInfo[item.symbol] = {
+                    text: item.mock_desc + " (Mock Data: API calls are disabled for static hosting).",
+                    sources: []
+                };
+                cache.audioUrls[item.symbol] = 'mock'; // Use 'mock' to signal mock playback
+            });
+            ipaSymbols.consonants.forEach(item => {
+                cache.searchInfo[item.symbol] = {
+                    text: item.mock_desc + " (Mock Data: API calls are disabled for static hosting).",
+                    sources: []
+                };
+                cache.audioUrls[item.symbol] = 'mock'; // Use 'mock' to signal mock playback
+            });
+            console.log("Static Hosting Mode: API calls are mocked for GitHub Pages compatibility.");
+        }
+
 
         // --- UI Initialization ---
 
@@ -252,7 +251,7 @@
             button.setAttribute('data-symbol', item.symbol);
             button.setAttribute('data-example', item.example);
             button.setAttribute('title', `Click to hear and learn about the ${item.symbol} sound.`);
-            // MODIFIED: Increased symbol size and reduced/stacked example word size
+            
             button.innerHTML = `
                 <span class="text-2xl">${item.symbol}</span>
                 <span class="text-xs font-light opacity-75">(${item.example})</span>
@@ -323,8 +322,12 @@
             return new Blob([buffer], { type: 'audio/wav' });
         }
 
-        // Plays audio from a cached Blob URL
+        // Plays audio from a cached Blob URL or plays a mock sound
         function playCachedAudio(audioUrl) {
+            if (audioUrl === 'mock') {
+                playMockAudio();
+                return true;
+            }
             if (audioUrl) {
                 const audio = new Audio(audioUrl);
                 audio.play().catch(e => console.error("Error playing audio:", e));
@@ -389,20 +392,16 @@
             if (cache.audioUrls[symbol]) {
                 return cache.audioUrls[symbol];
             }
+            if (IS_STATIC_HOSTING) return 'mock';
 
+            // --- LIVE API CALL (Only runs in Canvas environment) ---
             const prompt = `Pronounce the IPA sound ${symbol} and say the example word "${exampleWord}" slowly and clearly.`;
             
             const ttsPayload = {
-                contents: [{
-                    parts: [{ text: prompt }]
-                }],
+                contents: [{ parts: [{ text: prompt }] }],
                 generationConfig: {
                     responseModalities: ["AUDIO"],
-                    speechConfig: {
-                        voiceConfig: {
-                            prebuiltVoiceConfig: { voiceName: "Puck" } // A clear, upbeat voice
-                        }
-                    }
+                    speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Puck" } } }
                 },
                 model: "gemini-2.5-flash-preview-tts"
             };
@@ -447,7 +446,17 @@
             if (cache.searchInfo[symbol]) {
                 return cache.searchInfo[symbol];
             }
+            if (IS_STATIC_HOSTING) {
+                // Find and return mock data if running statically
+                const item = [...ipaSymbols.vowels, ...ipaSymbols.consonants].find(i => i.symbol === symbol);
+                return {
+                    text: item.mock_desc + " (Mock Data: API calls are disabled for static hosting).",
+                    sources: []
+                };
+            }
 
+
+            // --- LIVE API CALL (Only runs in Canvas environment) ---
             const systemPrompt = "You are a friendly and precise phonetics instructor. Explain the following IPA sound in a single paragraph, including what type of sound it is (e.g., 'voiced alveolar stop'), and how it is produced. Keep the explanation concise and beginner-friendly.";
             const userQuery = `What is the IPA symbol ${symbol}? Give a short explanation of its pronunciation.`;
 
@@ -489,15 +498,18 @@
 
             } catch (error) {
                 console.error("Error during Google Search grounding:", error);
-                // Return a failure object, but don't cache
-                return { text: "An error occurred while fetching information.", sources: [] };
+                return { text: "An error occurred while fetching live information.", sources: [] };
             }
         }
 
         // --- Main Handler ---
 
         async function handleSymbolClick(symbol, exampleWord) {
-            setStatus(`Processing /${symbol}/... Fetching data if needed.`, true);
+            if (IS_STATIC_HOSTING) {
+                setStatus(`Running in Static Mode. Playing mock audio for /${symbol}/.`, true, 'cyan');
+            } else {
+                setStatus(`Processing /${symbol}/... Fetching data if needed.`, true);
+            }
 
             const cachedAudioUrl = cache.audioUrls[symbol];
             const cachedSearchResult = cache.searchInfo[symbol];
@@ -507,6 +519,8 @@
             
             // 1. DETERMINE FETCH PROMISES
             const fetchPromises = [];
+            
+            // Only fetch if not cached AND not static hosting
             if (!cachedSearchResult) {
                 fetchPromises.push(searchPhonemeInfo(symbol));
             }
@@ -516,8 +530,9 @@
 
             // 2. CONCURRENTLY FETCH MISSING DATA
             if (fetchPromises.length > 0) {
-                // Wait for all missing data to be fetched/cached
-                setStatus(`Fetching new data for /${symbol}/...`, true, 'fuchsia');
+                if (!IS_STATIC_HOSTING) {
+                    setStatus(`Fetching new data for /${symbol}/...`, true, 'fuchsia');
+                }
                 
                 const results = await Promise.all(fetchPromises);
                 let resultIndex = 0;
@@ -534,7 +549,7 @@
             // 3. PLAY AUDIO (newly fetched or cached)
             if (audioUrl) {
                 playCachedAudio(audioUrl);
-                setStatus(`Audio playing! Displaying details for /${symbol}/.`, false, 'cyan');
+                setStatus(IS_STATIC_HOSTING ? `Mock audio played! Displaying mock details for /${symbol}/.` : `Audio playing! Displaying details for /${symbol}/.`, false, 'cyan');
             } else {
                 setStatus(`Could not play audio for /${symbol}/. Displaying details.`, false, 'error');
             }
@@ -559,7 +574,7 @@
                 });
             } else {
                 const li = document.createElement('li');
-                li.textContent = 'No specific web sources found for the explanation.';
+                li.textContent = searchResult.text.includes("Mock Data") ? 'No live sources available in static hosting mode.' : 'No specific web sources found for the explanation.';
                 li.className = 'text-gray-500';
                 sourcesList.appendChild(li);
             }
