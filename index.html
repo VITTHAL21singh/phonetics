@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IPA Phonetics Explorer</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for a clean, sharp, cyber look */
+        .phoneme-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
+            gap: 12px;
+        }
+        .phoneme-button {
+            display: flex;
+            flex-direction: column; /* NEW: Stack symbol and example vertically */
+            align-items: center;
+            justify-content: center;
+            width: 90px; /* FIXED: Enforce uniform width for proper fitting */
+            height: 70px; /* FIXED: Enforce uniform height */
+            padding: 0.5rem 0.25rem; /* Reduced padding for better fit */
+            
+            font-family: 'Inter', monospace; 
+            font-weight: 700;
+            border-radius: 4px; /* Reduced rounding for sharpness */
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.5); /* Subtle dark shadow */
+            transition: all 0.15s ease-in-out;
+            cursor: pointer;
+            user-select: none;
+            border: 2px solid;
+            background-color: #1f2937; /* Dark slate background */
+        }
+        /* Neon Glow Effect on Hover (Vowels) */
+        .vowel {
+            border-color: #d946ef; /* Fuchsia-500 */
+            color: #f0abfc; /* Fuchsia-300 */
+        }
+        .vowel:hover {
+            border-color: #f0abfc;
+            color: white;
+            box-shadow: 0 0 15px #f0abfc; 
+            transform: scale(1.05); /* Slightly more dramatic hover effect */
+        }
+        /* Neon Glow Effect on Hover (Consonants) */
+        .consonant {
+            border-color: #06b6d4; /* Cyan-500 */
+            color: #67e8f9; /* Cyan-300 */
+        }
+        .consonant:hover {
+            border-color: #67e8f9;
+            color: white;
+            box-shadow: 0 0 15px #67e8f9;
+            transform: scale(1.05); /* Slightly more dramatic hover effect */
+        }
+        .loading-ring {
+            border: 4px solid rgba(255, 255, 255, 0.2);
+            border-top: 4px solid #67e8f9; /* Neon Cyan loading ring */
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-950 min-h-screen p-4 md:p-8 font-['Inter',_monospace] text-gray-100">
+
+    <!-- Main Application Container -->
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-4xl font-extrabold text-cyan-400 mb-2">IPA Phonetics Explorer</h1>
+        <p class="text-gray-400 mb-6 md:mb-8">Click any International Phonetic Alphabet (IPA) symbol to hear its pronunciation and see a quick explanation.</p>
+
+        <!-- Loading Indicator & Status Message (Cyan/Neon Themed) -->
+        <div id="status-message" class="hidden bg-gray-800 border border-cyan-600 text-cyan-400 px-4 py-3 rounded-md mb-6 shadow-xl" role="alert">
+            <div class="flex items-center">
+                <div id="loading-spinner" class="loading-ring mr-3 hidden"></div>
+                <p id="status-text" class="font-medium"></p>
+            </div>
+        </div>
+
+        <!-- IPA Chart Sections -->
+        <div id="ipa-chart-container" class="space-y-8">
+            
+            <!-- Vowels (Fuchsia Neon) -->
+            <h2 class="text-2xl font-bold text-fuchsia-400 border-b-2 border-fuchsia-600 pb-1">Monophthongs (Vowels)</h2>
+            <div id="vowel-grid" class="phoneme-grid">
+                <!-- Vowel buttons will be populated here -->
+            </div>
+
+            <!-- Consonants (Cyan Neon) -->
+            <h2 class="text-2xl font-bold text-cyan-400 border-b-2 border-cyan-600 pb-1 pt-4">Consonants</h2>
+            <div id="consonant-grid" class="phoneme-grid">
+                <!-- Consonant buttons will be populated here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Result Display (Simulating Video/Info Screen) -->
+    <div id="result-modal" class="fixed inset-0 bg-gray-900 bg-opacity-90 hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-gray-800 border border-cyan-500 rounded-lg shadow-2xl max-w-lg w-full p-6 space-y-4">
+            <h3 class="text-3xl font-bold text-cyan-400 border-b border-gray-700 pb-2 flex items-center">
+                Symbol: <span id="modal-symbol" class="ml-3 text-fuchsia-400"></span>
+                <button id="modal-play-audio" class="ml-4 p-2 bg-cyan-600 text-gray-900 rounded-full hover:bg-cyan-400 transition shadow-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9c2.5 2.5 2.5 6.57 0 9.07m-5.656-7.072l2.121 2.121m-4.242 4.242L12 12m-7.072 0a5 5 0 017.072 0v0z" />
+                    </svg>
+                </button>
+            </h3>
+            
+            <p id="modal-explanation" class="text-gray-300 text-lg"></p>
+            
+            <div class="pt-2">
+                <p class="font-semibold text-cyan-500">Source:</p>
+                <ul id="modal-sources" class="list-disc list-inside text-sm text-gray-500 space-y-1 ml-4">
+                    <!-- Sources will be inserted here -->
+                </ul>
+            </div>
+
+            <button onclick="closeModal()" class="w-full bg-fuchsia-600 text-white font-semibold py-2 rounded-md hover:bg-fuchsia-500 transition shadow-md">
+                Close
+            </button>
+        </div>
+    </div>
+
+    <!-- Firebase SDK Imports (Kept for environment compatibility, though not used for data storage here) -->
+    <script type="module">
+        // Firebase and Firestore imports
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global variables for Firebase (required environment setup)
+        let app, db, auth;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        let firebaseConfig;
+        
+        try {
+            firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        } catch (e) {
+            console.error("Failed to parse firebase config:", e);
+            firebaseConfig = {};
+        }
+
+        async function initFirebase() {
+            try {
+                if (Object.keys(firebaseConfig).length > 0) {
+                    app = initializeApp(firebaseConfig);
+                    db = getFirestore(app);
+                    auth = getAuth(app);
+
+                    if (typeof __initial_auth_token !== 'undefined') {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                    // console.log("Firebase initialized and authenticated successfully.");
+                } else {
+                    // console.warn("Firebase config is empty. Proceeding without full Firebase services.");
+                }
+            } catch (error) {
+                console.error("Error during Firebase initialization or authentication:", error);
+            }
+        }
+
+        // Initialize Firebase on window load
+        window.addEventListener('load', initFirebase);
+    </script>
+
+    <!-- Application Logic and Gemini API Calls -->
+    <script>
+        // Constants for Gemini API calls
+        const API_KEY = ""; // Canvas will provide this at runtime
+        const SEARCH_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${API_KEY}`;
+        const TTS_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${API_KEY}`;
+        const MAX_RETRIES = 5;
+
+        // --- Caching Strategy ---
+        const cache = {
+            searchInfo: {},
+            audioUrls: {} // Stores Object URL for cached audio blob
+        };
+
+        // --- Data Structure for IPA Symbols ---
+        const ipaSymbols = {
+            vowels: [
+                { symbol: 'iː', name: 'long E', example: 'sheep' },
+                { symbol: 'ɪ', name: 'short I', example: 'ship' },
+                { symbol: 'e', name: 'short E', example: 'red' },
+                { symbol: 'æ', name: 'short A', example: 'cat' },
+                { symbol: 'ʌ', name: 'short U', example: 'cup' },
+                { symbol: 'ɑː', name: 'long A', example: 'father' },
+                { symbol: 'ɔː', name: 'long O', example: 'door' },
+                { symbol: 'ʊ', name: 'short OO', example: 'good' },
+                { symbol: 'uː', name: 'long OO', example: 'blue' },
+                { symbol: 'ə', name: 'Schwa', example: 'about' },
+                { symbol: 'aɪ', name: 'Diphthong I', example: 'my' },
+                { symbol: 'ɔɪ', name: 'Diphthong Oi', example: 'boy' },
+            ],
+            consonants: [
+                { symbol: 'p', name: 'P sound', example: 'pen' },
+                { symbol: 'b', name: 'B sound', example: 'bat' },
+                { symbol: 't', name: 'T sound', example: 'top' },
+                { symbol: 'd', name: 'D sound', example: 'dog' },
+                { symbol: 'k', name: 'K sound', example: 'cat' },
+                { symbol: 'g', name: 'G sound', example: 'go' },
+                { symbol: 'f', name: 'F sound', example: 'fish' },
+                { symbol: 'v', name: 'V sound', example: 'van' },
+                { symbol: 'θ', name: 'Th (voiceless)', example: 'thing' },
+                { symbol: 'ð', name: 'Th (voiced)', example: 'this' },
+                { symbol: 's', name: 'S sound', example: 'sun' },
+                { symbol: 'z', name: 'Z sound', example: 'zoo' },
+                { symbol: 'ʃ', name: 'Sh sound', example: 'ship' },
+                { symbol: 'ʒ', name: 'Zh sound', example: 'vision' },
+                { symbol: 'tʃ', name: 'Ch sound', example: 'church' },
+                { symbol: 'dʒ', name: 'J sound', example: 'judge' },
+                { symbol: 'm', name: 'M sound', example: 'man' },
+                { symbol: 'n', name: 'N sound', example: 'no' },
+                { symbol: 'ŋ', name: 'Ng sound', example: 'sing' },
+                { symbol: 'l', name: 'L sound', example: 'love' },
+                { symbol: 'r', name: 'R sound', example: 'run' },
+                { symbol: 'j', name: 'Y sound', example: 'yes' },
+                { symbol: 'w', name: 'W sound', example: 'wet' },
+                { symbol: 'h', name: 'H sound', example: 'hat' },
+            ]
+        };
+
+        // --- UI Initialization ---
+
+        function renderPhonemeButtons() {
+            const vowelGrid = document.getElementById('vowel-grid');
+            const consonantGrid = document.getElementById('consonant-grid');
+
+            ipaSymbols.vowels.forEach(item => {
+                const button = createButton(item, 'vowel');
+                vowelGrid.appendChild(button);
+            });
+
+            ipaSymbols.consonants.forEach(item => {
+                const button = createButton(item, 'consonant');
+                consonantGrid.appendChild(button);
+            });
+        }
+
+        function createButton(item, type) {
+            const button = document.createElement('button');
+            button.className = `phoneme-button ${type}`;
+            button.setAttribute('data-symbol', item.symbol);
+            button.setAttribute('data-example', item.example);
+            button.setAttribute('title', `Click to hear and learn about the ${item.symbol} sound.`);
+            // MODIFIED: Increased symbol size and reduced/stacked example word size
+            button.innerHTML = `
+                <span class="text-2xl">${item.symbol}</span>
+                <span class="text-xs font-light opacity-75">(${item.example})</span>
+            `;
+            button.onclick = () => handleSymbolClick(item.symbol, item.example);
+            return button;
+        }
+
+        window.onload = renderPhonemeButtons;
+
+
+        // --- Utility Functions for Audio Playback ---
+
+        // Converts base64 to ArrayBuffer
+        function base64ToArrayBuffer(base64) {
+            const binaryString = atob(base64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        // Converts 16-bit PCM audio data to a WAV file Blob
+        function pcmToWav(pcm16, sampleRate = 24000) {
+            const numChannels = 1;
+            const bytesPerSample = 2; // 16-bit
+            const blockAlign = numChannels * bytesPerSample;
+            const byteRate = sampleRate * blockAlign;
+            const dataSize = pcm16.length * bytesPerSample;
+            const buffer = new ArrayBuffer(44 + dataSize); // 44-byte WAV header + data
+            const view = new DataView(buffer);
+            let offset = 0;
+
+            function writeString(s) {
+                for (let i = 0; i < s.length; i++) {
+                    view.setUint8(offset + i, s.charCodeAt(i));
+                }
+                offset += s.length;
+            }
+
+            // RIFF chunk
+            writeString('RIFF'); // ChunkID
+            view.setUint32(offset, 36 + dataSize, true); offset += 4; // ChunkSize
+            writeString('WAVE'); // Format
+
+            // FMT sub-chunk
+            writeString('fmt '); // Subchunk1ID
+            view.setUint32(offset, 16, true); offset += 4; // Subchunk1Size (16 for PCM)
+            view.setUint16(offset, 1, true); offset += 2; // AudioFormat (1 for PCM)
+            view.setUint16(offset, numChannels, true); offset += 2; // NumChannels
+            view.setUint32(offset, sampleRate, true); offset += 4; // SampleRate
+            view.setUint32(offset, byteRate, true); offset += 4; // ByteRate
+            view.setUint16(offset, blockAlign, true); offset += 2; // BlockAlign
+            view.setUint16(offset, bytesPerSample * 8, true); offset += 2; // BitsPerSample
+
+            // DATA sub-chunk
+            writeString('data'); // Subchunk2ID
+            view.setUint32(offset, dataSize, true); offset += 4; // Subchunk2Size
+
+            // Write PCM data
+            for (let i = 0; i < pcm16.length; i++) {
+                view.setInt16(offset, pcm16[i], true); // true for little-endian
+                offset += 2;
+            }
+
+            return new Blob([buffer], { type: 'audio/wav' });
+        }
+
+        // Plays audio from a cached Blob URL
+        function playCachedAudio(audioUrl) {
+            if (audioUrl) {
+                const audio = new Audio(audioUrl);
+                audio.play().catch(e => console.error("Error playing audio:", e));
+                return true;
+            }
+            return false;
+        }
+
+
+        // --- API Call and State Management ---
+
+        function setStatus(message, isLoading = false, type = 'cyan') {
+            const statusDiv = document.getElementById('status-message');
+            const statusText = document.getElementById('status-text');
+            const spinner = document.getElementById('loading-spinner');
+
+            // Using the dark/neon status bar classes
+            const statusClasses = {
+                'cyan': 'bg-gray-800 border border-cyan-600 text-cyan-400',
+                'fuchsia': 'bg-gray-800 border border-fuchsia-600 text-fuchsia-400',
+                'error': 'bg-red-900 border border-red-600 text-red-400'
+            };
+            
+            // Apply base classes plus selected neon style
+            statusDiv.className = `${statusClasses[type]} px-4 py-3 rounded-md mb-6 shadow-xl`;
+
+
+            if (isLoading) {
+                statusDiv.classList.remove('hidden');
+                spinner.classList.remove('hidden');
+                statusText.textContent = message;
+            } else if (message) {
+                statusDiv.classList.remove('hidden');
+                spinner.classList.add('hidden');
+                statusText.textContent = message;
+                setTimeout(() => statusDiv.classList.add('hidden'), 5000); // Hide after 5 seconds
+            } else {
+                statusDiv.classList.add('hidden');
+            }
+        }
+
+        async function fetchWithRetry(url, options, maxRetries) {
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response;
+                } catch (error) {
+                    console.error(`Fetch attempt ${i + 1} failed:`, error);
+                    if (i === maxRetries - 1) throw error;
+                    const delay = Math.pow(2, i) * 1000;
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+        }
+
+        // 1. TEXT-TO-SPEECH (TTS) - Fetches and Caches Audio URL
+        async function getAudioUrl(symbol, exampleWord) {
+            // CHECK CACHE
+            if (cache.audioUrls[symbol]) {
+                return cache.audioUrls[symbol];
+            }
+
+            const prompt = `Pronounce the IPA sound ${symbol} and say the example word "${exampleWord}" slowly and clearly.`;
+            
+            const ttsPayload = {
+                contents: [{
+                    parts: [{ text: prompt }]
+                }],
+                generationConfig: {
+                    responseModalities: ["AUDIO"],
+                    speechConfig: {
+                        voiceConfig: {
+                            prebuiltVoiceConfig: { voiceName: "Puck" } // A clear, upbeat voice
+                        }
+                    }
+                },
+                model: "gemini-2.5-flash-preview-tts"
+            };
+
+            try {
+                const response = await fetchWithRetry(TTS_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(ttsPayload)
+                }, MAX_RETRIES);
+
+                const result = await response.json();
+                const part = result?.candidates?.[0]?.content?.parts?.[0];
+                const audioData = part?.inlineData?.data;
+                const mimeType = part?.inlineData?.mimeType;
+
+                if (audioData && mimeType && mimeType.startsWith("audio/")) {
+                    const rateMatch = mimeType.match(/rate=(\d+)/);
+                    const sampleRate = rateMatch ? parseInt(rateMatch[1], 10) : 24000; 
+                    
+                    const pcmData = base64ToArrayBuffer(audioData);
+                    const pcm16 = new Int16Array(pcmData);
+                    const wavBlob = pcmToWav(pcm16, sampleRate);
+                    const audioUrl = URL.createObjectURL(wavBlob);
+                    
+                    // STORE IN CACHE
+                    cache.audioUrls[symbol] = audioUrl;
+                    return audioUrl;
+                } else {
+                    console.error("TTS audio data missing or invalid format:", result);
+                    return null;
+                }
+            } catch (error) {
+                console.error("Error generating TTS audio:", error);
+                return null;
+            }
+        }
+
+        // 2. GOOGLE SEARCH GROUNDING - Fetches and Caches Search Info
+        async function searchPhonemeInfo(symbol) {
+            // CHECK CACHE
+            if (cache.searchInfo[symbol]) {
+                return cache.searchInfo[symbol];
+            }
+
+            const systemPrompt = "You are a friendly and precise phonetics instructor. Explain the following IPA sound in a single paragraph, including what type of sound it is (e.g., 'voiced alveolar stop'), and how it is produced. Keep the explanation concise and beginner-friendly.";
+            const userQuery = `What is the IPA symbol ${symbol}? Give a short explanation of its pronunciation.`;
+
+            const searchPayload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                tools: [{ "google_search": {} }],
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+            };
+
+            try {
+                const response = await fetchWithRetry(SEARCH_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(searchPayload)
+                }, MAX_RETRIES);
+
+                const result = await response.json();
+                const candidate = result.candidates?.[0];
+
+                let searchResult = { text: "Could not find a detailed explanation for this sound.", sources: [] };
+
+                if (candidate && candidate.content?.parts?.[0]?.text) {
+                    searchResult.text = candidate.content.parts[0].text;
+                    const groundingMetadata = candidate.groundingMetadata;
+
+                    if (groundingMetadata && groundingMetadata.groundingAttributions) {
+                        searchResult.sources = groundingMetadata.groundingAttributions
+                            .map(attribution => ({
+                                uri: attribution.web?.uri,
+                                title: attribution.web?.title,
+                            }))
+                            .filter(source => source.uri && source.title);
+                    }
+                }
+                
+                // STORE IN CACHE
+                cache.searchInfo[symbol] = searchResult;
+                return searchResult;
+
+            } catch (error) {
+                console.error("Error during Google Search grounding:", error);
+                // Return a failure object, but don't cache
+                return { text: "An error occurred while fetching information.", sources: [] };
+            }
+        }
+
+        // --- Main Handler ---
+
+        async function handleSymbolClick(symbol, exampleWord) {
+            setStatus(`Processing /${symbol}/... Fetching data if needed.`, true);
+
+            const cachedAudioUrl = cache.audioUrls[symbol];
+            const cachedSearchResult = cache.searchInfo[symbol];
+
+            let audioUrl = cachedAudioUrl;
+            let searchResult = cachedSearchResult;
+            
+            // 1. DETERMINE FETCH PROMISES
+            const fetchPromises = [];
+            if (!cachedSearchResult) {
+                fetchPromises.push(searchPhonemeInfo(symbol));
+            }
+            if (!cachedAudioUrl) {
+                fetchPromises.push(getAudioUrl(symbol, exampleWord));
+            }
+
+            // 2. CONCURRENTLY FETCH MISSING DATA
+            if (fetchPromises.length > 0) {
+                // Wait for all missing data to be fetched/cached
+                setStatus(`Fetching new data for /${symbol}/...`, true, 'fuchsia');
+                
+                const results = await Promise.all(fetchPromises);
+                let resultIndex = 0;
+
+                // Assign results based on what was fetched (order matters!)
+                if (!cachedSearchResult) {
+                    searchResult = results[resultIndex++];
+                }
+                if (!cachedAudioUrl) {
+                    audioUrl = results[resultIndex];
+                }
+            }
+            
+            // 3. PLAY AUDIO (newly fetched or cached)
+            if (audioUrl) {
+                playCachedAudio(audioUrl);
+                setStatus(`Audio playing! Displaying details for /${symbol}/.`, false, 'cyan');
+            } else {
+                setStatus(`Could not play audio for /${symbol}/. Displaying details.`, false, 'error');
+            }
+            
+            // 4. DISPLAY RESULTS IN MODAL
+            document.getElementById('modal-symbol').textContent = `/${symbol}/`;
+            document.getElementById('modal-explanation').textContent = searchResult.text;
+            
+            // Re-bind the play button to the final audio URL (cached or new)
+            const playButton = document.getElementById('modal-play-audio');
+            playButton.onclick = () => playCachedAudio(audioUrl);
+
+            // Populate sources
+            const sourcesList = document.getElementById('modal-sources');
+            sourcesList.innerHTML = '';
+            
+            if (searchResult.sources && searchResult.sources.length > 0) {
+                searchResult.sources.forEach(source => {
+                    const li = document.createElement('li');
+                    li.innerHTML = `<a href="${source.uri}" target="_blank" class="text-fuchsia-400 hover:text-fuchsia-300 break-words">${source.title || source.uri}</a>`;
+                    sourcesList.appendChild(li);
+                });
+            } else {
+                const li = document.createElement('li');
+                li.textContent = 'No specific web sources found for the explanation.';
+                li.className = 'text-gray-500';
+                sourcesList.appendChild(li);
+            }
+
+            // Show the modal
+            document.getElementById('result-modal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('result-modal').classList.add('hidden');
+        }
+
+        window.closeModal = closeModal;
+    </script>
+</body>
+</html>
