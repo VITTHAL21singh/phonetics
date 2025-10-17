@@ -210,14 +210,8 @@
 
         // Pre-populate mock data for static hosting
         if (IS_STATIC_HOSTING) {
-            ipaSymbols.vowels.forEach(item => {
-                cache.searchInfo[item.symbol] = {
-                    text: item.mock_desc + " (Mock Data: API calls are disabled for static hosting).",
-                    sources: []
-                };
-                cache.audioUrls[item.symbol] = 'mock'; // Use 'mock' to signal mock playback
-            });
-            ipaSymbols.consonants.forEach(item => {
+            const allSymbols = [...ipaSymbols.vowels, ...ipaSymbols.consonants];
+            allSymbols.forEach(item => {
                 cache.searchInfo[item.symbol] = {
                     text: item.mock_desc + " (Mock Data: API calls are disabled for static hosting).",
                     sources: []
@@ -448,11 +442,9 @@
             }
             if (IS_STATIC_HOSTING) {
                 // Find and return mock data if running statically
-                const item = [...ipaSymbols.vowels, ...ipaSymbols.consonants].find(i => i.symbol === symbol);
-                return {
-                    text: item.mock_desc + " (Mock Data: API calls are disabled for static hosting).",
-                    sources: []
-                };
+                // Corrected lookup: Check cache directly which was prepopulated correctly in the if (IS_STATIC_HOSTING) block.
+                const mockData = cache.searchInfo[symbol];
+                return mockData || { text: "Mock Data Error: Could not find mock information.", sources: [] };
             }
 
 
@@ -549,6 +541,7 @@
             // 3. PLAY AUDIO (newly fetched or cached)
             if (audioUrl) {
                 playCachedAudio(audioUrl);
+                // Note: The status message here is fine, the modal display handles the content
                 setStatus(IS_STATIC_HOSTING ? `Mock audio played! Displaying mock details for /${symbol}/.` : `Audio playing! Displaying details for /${symbol}/.`, false, 'cyan');
             } else {
                 setStatus(`Could not play audio for /${symbol}/. Displaying details.`, false, 'error');
