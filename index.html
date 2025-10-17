@@ -131,7 +131,8 @@
     <script>
         // --- Environment Detection ---
         // Determines if we are in the secure canvas environment or running statically (e.g., GitHub Pages).
-        const IS_STATIC_HOSTING = typeof __app_id === 'undefined'; 
+        // Check for the presence of a specific Canvas variable to indicate a live environment.
+        const IS_STATIC_HOSTING = typeof __initial_auth_token === 'undefined' && typeof __app_id === 'undefined'; 
 
         // Constants for Gemini API calls (Only used if not static hosting)
         const API_KEY = ""; 
@@ -386,7 +387,8 @@
             if (cache.audioUrls[symbol]) {
                 return cache.audioUrls[symbol];
             }
-            if (IS_STATIC_HOSTING) return 'mock';
+            // MODIFIED: If not live, return mock audio
+            if (IS_STATIC_HOSTING) return 'mock'; 
 
             // --- LIVE API CALL (Only runs in Canvas environment) ---
             const prompt = `Pronounce the IPA sound ${symbol} and say the example word "${exampleWord}" slowly and clearly.`;
@@ -442,7 +444,6 @@
             }
             if (IS_STATIC_HOSTING) {
                 // Find and return mock data if running statically
-                // Corrected lookup: Check cache directly which was prepopulated correctly in the if (IS_STATIC_HOSTING) block.
                 const mockData = cache.searchInfo[symbol];
                 return mockData || { text: "Mock Data Error: Could not find mock information.", sources: [] };
             }
@@ -513,10 +514,10 @@
             const fetchPromises = [];
             
             // Only fetch if not cached AND not static hosting
-            if (!cachedSearchResult) {
+            if (!cachedSearchResult || IS_STATIC_HOSTING === false) { 
                 fetchPromises.push(searchPhonemeInfo(symbol));
             }
-            if (!cachedAudioUrl) {
+            if (!cachedAudioUrl || IS_STATIC_HOSTING === false) {
                 fetchPromises.push(getAudioUrl(symbol, exampleWord));
             }
 
@@ -530,10 +531,10 @@
                 let resultIndex = 0;
 
                 // Assign results based on what was fetched (order matters!)
-                if (!cachedSearchResult) {
+                if (!cachedSearchResult || IS_STATIC_HOSTING === false) {
                     searchResult = results[resultIndex++];
                 }
-                if (!cachedAudioUrl) {
+                if (!cachedAudioUrl || IS_STATIC_HOSTING === false) {
                     audioUrl = results[resultIndex];
                 }
             }
